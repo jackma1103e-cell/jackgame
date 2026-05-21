@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Fusion Clicker: Expanded</title>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        /* Split screen layout like Cookie Clicker */
+        .left-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            border-right: 2px solid #334155;
+            position: relative;
+        }
+
+        .right-panel {
+            width: 380px;
+            background-color: #1e293b;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .shop-header {
+            padding: 1rem;
+            text-align: center;
+            background-color: #0f172a;
+            font-weight: bold;
+            font-size: 1.2rem;
+            border-bottom: 2px solid #334155;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
+        }
+
+        .upgrade-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        /* The Clicking Core */
+        #energy-core {
+            width: 180px;
+            height: 180px;
+            background: radial-gradient(circle, #38bdf8 0%, #3b82f6 50%, #1d4ed8 100%);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 40px #38bdf8, inset 0 0 20px #e0f2fe;
+            transition: transform 0.05s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            z-index: 10;
+        }
+
+        #energy-core:active {
+            transform: scale(0.9);
+            box-shadow: 0 0 60px #7dd3fc;
+        }
+
+        .score-display {
+            font-size: 3rem;
+            font-weight: 800;
+            color: #bae6fd;
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+            margin-bottom: 0.5rem;
+            z-index: 10;
+        }
+
+        .stats {
+            font-size: 1.2rem;
+            color: #94a3b8;
+            margin-bottom: 3rem;
+            z-index: 10;
+        }
+
+        /* Dynamic Shop Buttons */
+        .building-btn {
+            background-color: #334155;
+            color: #f8fafc;
+            border: 2px solid #475569;
+            padding: 0.8rem;
+            margin-bottom: 0.8rem;
+            border-radius: 0.5rem;
+            width: 100%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            transition: all 0.1s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .building-btn:hover:not(.disabled) {
+            background-color: #475569;
+            border-color: #38bdf8;
+            transform: translateX(-2px);
+        }
+
+        .building-btn.disabled {
+            background-color: #1e293b;
+            opacity: 0.5;
+            cursor: not-allowed;
+            filter: grayscale(100%);
+        }
+
+        .btn-icon {
+            font-size: 2rem;
+            margin-right: 1rem;
+            width: 40px;
+            text-align: center;
+        }
+
+        .btn-info {
+            flex: 1;
+            text-align: left;
+        }
+
+        .btn-name { font-weight: bold; font-size: 1.1rem; }
+        .btn-cost { color: #fca5a5; font-weight: bold; font-size: 0.9rem; margin-top: 0.2rem; }
+        .btn-cps { color: #86efac; font-size: 0.8rem; }
+        .btn-count {
+            font-size: 2rem;
+            color: #38bdf8;
+            opacity: 0.5;
+            font-weight: bold;
+            margin-left: 1rem;
+        }
+
+        /* Floating Particle Animation */
+        .particle {
+            position: absolute;
+            color: #bae6fd;
+            font-weight: bold;
+            font-size: 1.5rem;
+            pointer-events: none;
+            animation: floatUp 1s ease-out forwards;
+            z-index: 20;
+            text-shadow: 0 0 5px #38bdf8;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-100px) scale(1.5); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="left-panel" id="click-area">
+        <div class="score-display"><span id="energy-count">0</span> J</div>
+        <div class="stats">per second: <span id="eps-count">0</span> J</div>
+        <div id="energy-core"></div>
+    </div>
+
+    <div class="right-panel">
+        <div class="shop-header">Infrastructure Shop</div>
+        <div class="upgrade-list" id="shop-container">
+            <!-- Buildings generated by JS -->
+        </div>
+    </div>
+
+    <script>
+        // Game State
+        let energy = 0;
+        let cps = 0; // Cookies (Energy) Per Second
+        let clickPower = 1;
+
+        // The Massive Array Engine
+        const buildings = [
+            { id: 1, name: "Auto-Cursor", icon: "👆", baseCost: 15, baseCps: 0.1, count: 0 },
+            { id: 2, name: "Solar Array", icon: "☀️", baseCost: 100, baseCps: 1, count: 0 },
+            { id: 3, name: "Energy Farm", icon: "🌱", baseCost: 1100, baseCps: 8, count: 0 },
+            { id: 4, name: "Plasma Factory", icon: "🏭", baseCost: 12000, baseCps: 47, count: 0 },
+            { id: 5, name: "Quantum Mine", icon: "⛏️", baseCost: 130000, baseCps: 260, count: 0 },
+            { id: 6, name: "Orbital Ship", icon: "🚀", baseCost: 1400000, baseCps: 1400, count: 0 },
+            { id: 7, name: "Alchemy Lab", icon: "⚗️", baseCost: 20000000, baseCps: 7800, count: 0 },
+            { id: 8, name: "Wormhole", icon: "🌀", baseCost: 330000000, baseCps: 44000, count: 0 },
+            { id: 9, name: "Time Machine", icon: "⏳", baseCost: 5100000000, baseCps: 260000, count: 0 }
+        ];
+
+        // Format numbers to look clean (e.g., 1,000,000)
+        function format(num) {
+            return Math.floor(num).toLocaleString();
+        }
+
+        // Calculate Cost: Base * (1.15 ^ count)
+        function getCost(b) {
+            return Math.ceil(b.baseCost * Math.pow(1.15, b.count));
+        }
+
+        // Calculate Total CPS
+        function recalculateCPS() {
+            let total = 0;
+            buildings.forEach(b => {
+                total += b.baseCps * b.count;
+            });
+            cps = total;
+            document.getElementById('eps-count').textContent = format(cps);
+        }
+
+        // Update UI Loop
+        function updateUI() {
+            document.getElementById('energy-count').textContent = format(energy);
+            
+            // Update buttons dynamically
+            buildings.forEach((b, index) => {
+                const btn = document.getElementById('btn-' + index);
+                const cost = getCost(b);
+                
+                // Update text
+                document.getElementById('cost-' + index).textContent = format(cost) + ' J';
+                document.getElementById('count-' + index).textContent = b.count > 0 ? b.count : '';
+                
+                // Toggle disabled state visually
+                if (energy >= cost) {
+                    btn.classList.remove('disabled');
+                } else {
+                    btn.classList.add('disabled');
+                }
+            });
+        }
+
+        // Buy Function
+        function buyBuilding(index) {
+            const b = buildings[index];
+            const cost = getCost(b);
+            
+            if (energy >= cost) {
+                energy -= cost;
+                b.count++;
+                recalculateCPS();
+                updateUI();
+            }
+        }
+
+        // Floating Particles Engine
+        function spawnParticle(x, y) {
+            const clickArea = document.getElementById('click-area');
+            const particle = document.createElement('div');
+            particle.classList.add('particle');
+            particle.textContent = '+' + format(clickPower);
+            
+            // Randomize spawn position slightly around the mouse/center
+            const offsetX = (Math.random() - 0.5) * 40;
+            particle.style.left = (x + offsetX) + 'px';
+            particle.style.top = (y - 20) + 'px';
+            
+            clickArea.appendChild(particle);
+            
+            // Remove the DOM element after animation ends (1 second)
+            setTimeout(() => {
+                particle.remove();
+            }, 1000);
+        }
+
+        // Initialize Shop HTML using JavaScript
+        function initShop() {
+            const container = document.getElementById('shop-container');
+            buildings.forEach((b, index) => {
+                const div = document.createElement('div');
+                div.className = 'building-btn disabled';
+                div.id = 'btn-' + index;
+                div.onclick = () => buyBuilding(index);
+                
+                div.innerHTML = `
+                    <div class="btn-icon">${b.icon}</div>
+                    <div class="btn-info">
+                        <div class="btn-name">[Key ${b.id}] ${b.name}</div>
+                        <div class="btn-cost" id="cost-${index}">${format(b.baseCost)} J</div>
+                        <div class="btn-cps">+${format(b.baseCps)} J/s</div>
+                    </div>
+                    <div class="btn-count" id="count-${index}"></div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Core Click Events
+        const coreBtn = document.getElementById('energy-core');
+        
+        coreBtn.addEventListener('mousedown', (e) => {
+            energy += clickPower;
+            spawnParticle(e.clientX, e.clientY);
+            updateUI();
+        });
+
+        // Hardware HID Keyboard Listener (For your Pico 2!)
+        window.addEventListener('keydown', (event) => {
+            // 'c' to click the core
+            if (event.key.toLowerCase() === 'c') {
+                energy += clickPower;
+                // Spawn particle in center of core for keyboard presses
+                const rect = coreBtn.getBoundingClientRect();
+                spawnParticle(rect.left + rect.width / 2, rect.top + rect.height / 2);
+                updateUI();
+            }
+            
+            // Keys 1-9 to buy buildings
+            const keyNum = parseInt(event.key);
+            if (keyNum >= 1 && keyNum <= 9) {
+                buyBuilding(keyNum - 1); // Arrays start at 0, keys start at 1
+            }
+        });
+
+        // The Auto-Generation Loop (10 ticks per second for smooth numbers)
+        setInterval(() => {
+            if (cps > 0) {
+                energy += (cps / 10);
+                updateUI();
+            }
+        }, 100);
+
+        // Start Game
+        initShop();
+        recalculateCPS();
+        updateUI();
+    </script>
+</body>
+</html>
